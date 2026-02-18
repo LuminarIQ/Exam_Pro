@@ -5,9 +5,16 @@ on:
     branches: ["main", "master"]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
     services:
       postgres:
         image: postgres:16
@@ -45,11 +52,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: pnpm
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - name: Setup pnpm (corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.0.0 --activate
+          pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile=false
@@ -104,3 +113,10 @@ jobs:
           done
           curl -fsS http://localhost:3000/api/health
           curl -fsS http://localhost:3000/api/health/ready
+
+      - name: Upload API runtime log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-runtime-log
+          path: /tmp/api.log

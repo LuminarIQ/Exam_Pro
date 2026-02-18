@@ -5,6 +5,10 @@ on:
   push:
     branches: ["main", "master"]
 
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   preflight:
     runs-on: ubuntu-latest
@@ -58,6 +62,7 @@ jobs:
     needs: preflight
     if: ${{ needs.preflight.outputs.ready == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     permissions:
       id-token: write
       contents: read
