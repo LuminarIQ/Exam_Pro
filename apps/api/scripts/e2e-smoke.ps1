@@ -14,6 +14,33 @@ function Assert-LastExitCode($context) {
   }
 }
 
+function Stop-RepoNodeProcesses {
+  try {
+    $procs = Get-CimInstance Win32_Process -Filter "name = 'node.exe'"
+    foreach ($p in $procs) {
+      $cmd = "$($p.CommandLine)"
+      if ($cmd -like "*Exam_pro*") {
+        Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+      }
+    }
+  } catch {}
+}
+
+function Invoke-PrismaGenerateWithRetry {
+  $max = 3
+  for ($attempt = 1; $attempt -le $max; $attempt++) {
+    pnpm --filter @app/api prisma:generate
+    if ($LASTEXITCODE -eq 0) { return }
+
+    Write-Host "prisma generate attempt $attempt failed. Trying lock cleanup..." -ForegroundColor Yellow
+    Stop-RepoNodeProcesses
+    Get-ChildItem -Path "node_modules/.pnpm" -Recurse -Filter "query_engine-windows.dll.node.tmp*" -ErrorAction SilentlyContinue |
+      Remove-Item -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+  }
+  throw "prisma generate failed after retries"
+}
+
 function Invoke-Api($method, $url, $headers = @{}, $body = $null) {
   if ($null -ne $body) {
     return Invoke-RestMethod -Method $method -Uri $url -Headers $headers -ContentType "application/json" -Body ($body | ConvertTo-Json -Depth 10)
@@ -54,8 +81,7 @@ try {
   Write-Step "2) Install deps + prisma generate"
   pnpm install
   Assert-LastExitCode "pnpm install"
-  pnpm --filter @app/api prisma:generate
-  Assert-LastExitCode "prisma generate"
+  Invoke-PrismaGenerateWithRetry
 
   Write-Step "3) Migrate + seed"
   pnpm --filter @app/api exec prisma migrate deploy
