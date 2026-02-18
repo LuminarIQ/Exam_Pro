@@ -27,7 +27,7 @@ function Stop-RepoNodeProcesses {
 }
 
 function Invoke-PrismaGenerateWithRetry {
-  $probeCmd = "const { PrismaClient } = require('@prisma/client'); const p = new PrismaClient(); const ok = !!p.tenant && !!p.promptVersion; console.log(ok ? 'PRISMA_CLIENT_OK' : 'PRISMA_CLIENT_MISSING'); p['`$disconnect']().finally(() => process.exit(ok ? 0 : 1));"
+  $probeCmd = "const { PrismaClient } = require('@prisma/client'); const p = new PrismaClient(); const ok = !!p.tenant && !!p.promptVersion; console.log(ok ? 'PRISMA_CLIENT_OK' : 'PRISMA_CLIENT_MISSING'); process.exit(ok ? 0 : 1);"
   pnpm --filter @app/api exec node -e $probeCmd
   if ($LASTEXITCODE -eq 0) {
     Write-Host "Prisma client already usable. Skipping prisma generate to avoid Windows lock contention." -ForegroundColor Yellow
