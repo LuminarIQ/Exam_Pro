@@ -33,8 +33,10 @@ $WebBase = "http://localhost:5173"
 $Tenant = "public"
 $apiProc = $null
 $webProc = $null
-$apiLog = Join-Path $env:TEMP "adaptive-api-dev.log"
-$webLog = Join-Path $env:TEMP "adaptive-web-dev.log"
+$apiLogOut = Join-Path $env:TEMP "adaptive-api-dev.out.log"
+$apiLogErr = Join-Path $env:TEMP "adaptive-api-dev.err.log"
+$webLogOut = Join-Path $env:TEMP "adaptive-web-dev.out.log"
+$webLogErr = Join-Path $env:TEMP "adaptive-web-dev.err.log"
 
 try {
   Write-Step "0) Preflight Docker daemon"
@@ -62,17 +64,20 @@ try {
   Assert-LastExitCode "prisma seed"
 
   Write-Step "4) Start API + Web (background)"
-  if (Test-Path $apiLog) { Remove-Item $apiLog -Force }
-  if (Test-Path $webLog) { Remove-Item $webLog -Force }
-  $apiProc = Start-Process -FilePath "pnpm.cmd" -ArgumentList "--filter @app/api dev" -PassThru -WindowStyle Hidden -RedirectStandardOutput $apiLog -RedirectStandardError $apiLog
-  $webProc = Start-Process -FilePath "pnpm.cmd" -ArgumentList "--filter @app/web dev" -PassThru -WindowStyle Hidden -RedirectStandardOutput $webLog -RedirectStandardError $webLog
+  if (Test-Path $apiLogOut) { Remove-Item $apiLogOut -Force }
+  if (Test-Path $apiLogErr) { Remove-Item $apiLogErr -Force }
+  if (Test-Path $webLogOut) { Remove-Item $webLogOut -Force }
+  if (Test-Path $webLogErr) { Remove-Item $webLogErr -Force }
+  $apiProc = Start-Process -FilePath "pnpm.cmd" -ArgumentList "--filter @app/api dev" -PassThru -WindowStyle Hidden -RedirectStandardOutput $apiLogOut -RedirectStandardError $apiLogErr
+  $webProc = Start-Process -FilePath "pnpm.cmd" -ArgumentList "--filter @app/web dev" -PassThru -WindowStyle Hidden -RedirectStandardOutput $webLogOut -RedirectStandardError $webLogErr
 
   Write-Step "5) Wait for API health"
   $ok = $false
   for ($i=0; $i -lt 90; $i++) {
     if ($apiProc.HasExited) {
       Write-Host "API process exited early. Tail log:" -ForegroundColor Red
-      if (Test-Path $apiLog) { Get-Content $apiLog -Tail 120 | Out-Host }
+      if (Test-Path $apiLogOut) { Get-Content $apiLogOut -Tail 120 | Out-Host }
+      if (Test-Path $apiLogErr) { Get-Content $apiLogErr -Tail 120 | Out-Host }
       throw "API process exited before health became ready"
     }
     try {
@@ -83,7 +88,8 @@ try {
   }
   if (-not $ok) {
     Write-Host "API health check failed. Tail log:" -ForegroundColor Red
-    if (Test-Path $apiLog) { Get-Content $apiLog -Tail 160 | Out-Host }
+    if (Test-Path $apiLogOut) { Get-Content $apiLogOut -Tail 160 | Out-Host }
+    if (Test-Path $apiLogErr) { Get-Content $apiLogErr -Tail 160 | Out-Host }
     throw "API health check failed"
   }
 
@@ -92,7 +98,8 @@ try {
   for ($i=0; $i -lt 90; $i++) {
     if ($webProc.HasExited) {
       Write-Host "Web process exited early. Tail log:" -ForegroundColor Red
-      if (Test-Path $webLog) { Get-Content $webLog -Tail 120 | Out-Host }
+      if (Test-Path $webLogOut) { Get-Content $webLogOut -Tail 120 | Out-Host }
+      if (Test-Path $webLogErr) { Get-Content $webLogErr -Tail 120 | Out-Host }
       throw "Web process exited before dev server became reachable"
     }
     try {
@@ -103,7 +110,8 @@ try {
   }
   if (-not $webOk) {
     Write-Host "Web server check failed. Tail log:" -ForegroundColor Red
-    if (Test-Path $webLog) { Get-Content $webLog -Tail 160 | Out-Host }
+    if (Test-Path $webLogOut) { Get-Content $webLogOut -Tail 160 | Out-Host }
+    if (Test-Path $webLogErr) { Get-Content $webLogErr -Tail 160 | Out-Host }
     throw "Web server not reachable on $WebBase"
   }
 
@@ -193,6 +201,8 @@ finally {
   Write-Step "Cleanup background dev processes"
   if ($apiProc -and -not $apiProc.HasExited) { Stop-Process -Id $apiProc.Id -Force }
   if ($webProc -and -not $webProc.HasExited) { Stop-Process -Id $webProc.Id -Force }
-  if (Test-Path $apiLog) { Write-Host "API log: $apiLog" }
-  if (Test-Path $webLog) { Write-Host "Web log: $webLog" }
+  if (Test-Path $apiLogOut) { Write-Host "API stdout log: $apiLogOut" }
+  if (Test-Path $apiLogErr) { Write-Host "API stderr log: $apiLogErr" }
+  if (Test-Path $webLogOut) { Write-Host "Web stdout log: $webLogOut" }
+  if (Test-Path $webLogErr) { Write-Host "Web stderr log: $webLogErr" }
 }
