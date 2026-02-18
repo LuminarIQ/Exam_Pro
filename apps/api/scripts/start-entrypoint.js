@@ -3,8 +3,8 @@ const path = require('path');
 
 const projectRoot = path.resolve(__dirname, '..');
 const candidates = [
-  'dist/apps/api/src/main.js',
   'dist/src/main.js',
+  'dist/apps/api/src/main.js',
   'dist/main.js',
 ];
 
