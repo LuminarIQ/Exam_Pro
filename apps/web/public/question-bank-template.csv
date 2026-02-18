@@ -1,0 +1,3 @@
+subject,chapter,topic,stem,explanation,difficulty,expectedSolveTimeSec,optionA,optionB,optionC,optionD,correctOption,source,status
+Mathematics,Algebra,Linear Equations,"Solve: 2x + 3 = 11","Subtract 3, then divide by 2",1200,60,2,3,4,5,D,MANUAL,APPROVED
+Mathematics,Algebra,Quadratics,"Roots of x^2 - 5x + 6 = 0?","Factorize into (x-2)(x-3)",1300,75,"2 and 3","1 and 6","-2 and -3","0 and 5",A,MANUAL,APPROVED

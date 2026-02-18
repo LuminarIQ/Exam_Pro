@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+*.log
+apps/api/node_modules
+apps/web/node_modules
+packages/shared/node_modules

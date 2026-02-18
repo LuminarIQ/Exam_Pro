@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adaptive_tutor
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d adaptive_tutor"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adaptive_tutor?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-secret
+      DEFAULT_TENANT_ID: public
+      AUTH_COOKIE_MODE: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Security audit gate
+        run: pnpm audit:gate
+
+      - name: Build shared
+        run: pnpm --filter @pkg/shared build
+
+      - name: Prisma generate
+        run: pnpm --filter @app/api prisma:generate
+
+      - name: Apply DB migrations
+        run: pnpm --filter @app/api exec prisma migrate deploy
+
+      - name: Seed DB
+        run: pnpm --filter @app/api prisma:seed
+
+      - name: Lint API
+        run: pnpm --filter @app/api lint
+
+      - name: Unit tests API
+        run: pnpm --filter @app/api test:ci
+
+      - name: E2E tests API
+        run: pnpm --filter @app/api test:e2e
+
+      - name: Build API
+        run: pnpm --filter @app/api build
+
+      - name: Build Web
+        run: pnpm --filter @app/web build
+
+      - name: Upload API coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage
+          path: apps/coverage
+
+      - name: Prisma schema validate
+        run: pnpm --filter @app/api exec prisma validate
+
+      - name: Smoke test API health/readiness
+        run: |
+          pnpm --filter @app/api start > /tmp/api.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://localhost:3000/api/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:3000/api/health
+          curl -fsS http://localhost:3000/api/health/ready

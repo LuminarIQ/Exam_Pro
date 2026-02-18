@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "adaptive-tutor.fullname" . }}-api
+  labels:
+    app.kubernetes.io/component: api
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.api.service.type }}
+  selector:
+    app: {{ include "adaptive-tutor.fullname" . }}-api
+  ports:
+    - name: http
+      port: {{ .Values.api.service.port }}
+      targetPort: {{ .Values.api.containerPort }}

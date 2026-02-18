@@ -1,0 +1,126 @@
+name: Deploy-EKS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main", "master"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      AWS_REGION: us-east-1
+      ECR_REPOSITORY_API: adaptive-tutor-api
+      ECR_REPOSITORY_WEB: adaptive-tutor-web
+      EKS_CLUSTER_NAME: adaptive-tutor-eks
+      HELM_RELEASE: adaptive-tutor
+      HELM_NAMESPACE: adaptive-tutor
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Build and push API image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f apps/api/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY_API:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_API:$IMAGE_TAG
+
+      - name: Build and push Web image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f apps/web/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY_WEB:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_WEB:$IMAGE_TAG
+
+      - name: Configure kubectl
+        run: aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+
+      - name: Helm lint
+        run: helm lint charts/adaptive-tutor
+
+      - name: Helm template validate
+        run: |
+          helm template $HELM_RELEASE charts/adaptive-tutor \
+            --namespace $HELM_NAMESPACE >/tmp/helm-render.yaml
+          test -s /tmp/helm-render.yaml
+
+      - name: Deploy with Helm
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          COOKIE_SECRET: ${{ secrets.COOKIE_SECRET }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+        run: |
+          kubectl create namespace $HELM_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          helm upgrade --install $HELM_RELEASE charts/adaptive-tutor \
+            --namespace $HELM_NAMESPACE \
+            --set api.image.repository=$ECR_REGISTRY/$ECR_REPOSITORY_API \
+            --set api.image.tag=$IMAGE_TAG \
+            --set web.image.repository=$ECR_REGISTRY/$ECR_REPOSITORY_WEB \
+            --set web.image.tag=$IMAGE_TAG \
+            --set migration.image.repository=$ECR_REGISTRY/$ECR_REPOSITORY_API \
+            --set migration.image.tag=$IMAGE_TAG \
+            --set api.secretEnv.JWT_SECRET="$JWT_SECRET" \
+            --set api.secretEnv.COOKIE_SECRET="$COOKIE_SECRET" \
+            --set api.secretEnv.DATABASE_URL="$DATABASE_URL" \
+            --set api.secretEnv.REDIS_URL="$REDIS_URL"
+
+      - name: Wait for migration job completion
+        run: |
+          for i in {1..30}; do
+            job=$(kubectl get jobs -n $HELM_NAMESPACE --sort-by=.metadata.creationTimestamp -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep "$HELM_RELEASE-adaptive-tutor-migration-" | tail -n 1 || true)
+            if [ -n "$job" ]; then
+              kubectl wait --for=condition=complete --timeout=300s job/$job -n $HELM_NAMESPACE
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Migration job not found" && exit 1
+
+      - name: Smoke test API health and readiness
+        run: |
+          kubectl rollout status deployment/$HELM_RELEASE-adaptive-tutor-api -n $HELM_NAMESPACE --timeout=180s
+          kubectl rollout status deployment/$HELM_RELEASE-adaptive-tutor-web -n $HELM_NAMESPACE --timeout=180s
+          kubectl get pods -n $HELM_NAMESPACE
+          kubectl port-forward deployment/$HELM_RELEASE-adaptive-tutor-api -n $HELM_NAMESPACE 18080:3000 >/tmp/pf.log 2>&1 &
+          for i in {1..20}; do
+            if curl -fsS http://localhost:18080/api/health >/dev/null; then
+              break
+            fi
+            sleep 3
+          done
+          curl -fsS http://localhost:18080/api/health
+          curl -fsS http://localhost:18080/api/health/ready

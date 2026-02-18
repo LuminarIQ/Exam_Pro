@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "adaptive-tutor.fullname" . }}-web
+spec:
+  replicas: {{ .Values.web.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "adaptive-tutor.fullname" . }}-web
+  template:
+    metadata:
+      labels:
+        app: {{ include "adaptive-tutor.fullname" . }}-web
+    spec:
+      serviceAccountName: {{ include "adaptive-tutor.serviceAccountName" . }}
+      containers:
+        - name: web
+          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.web.containerPort }}
+          resources:
+{{ toYaml .Values.web.resources | indent 12 }}

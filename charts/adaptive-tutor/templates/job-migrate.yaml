@@ -1,0 +1,25 @@
+{{- if .Values.migration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "adaptive-tutor.fullname" . }}-migration-{{ .Release.Revision }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "adaptive-tutor.serviceAccountName" . }}
+      containers:
+        - name: migrate
+          image: "{{ .Values.migration.image.repository }}:{{ .Values.migration.image.tag }}"
+          imagePullPolicy: {{ .Values.migration.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "adaptive-tutor.fullname" . }}-api-config
+            - secretRef:
+                name: {{ include "adaptive-tutor.fullname" . }}-api-secrets
+          command: ["sh", "-c", "pnpm exec prisma migrate deploy"]
+{{- end }}

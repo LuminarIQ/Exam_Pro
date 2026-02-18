@@ -1,0 +1,30 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "adaptive-tutor.fullname" . }}-api
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "adaptive-tutor.fullname" . }}-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.api.containerPort }}
+{{- if .Values.networkPolicy.allowMetricsFromMonitoringNamespace }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: {{ .Values.api.containerPort }}
+{{- end }}
+  egress:
+    - {}
+{{- end }}

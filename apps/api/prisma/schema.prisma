@@ -1,0 +1,435 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum QuestionStatus {
+  DRAFT
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum QuestionSource {
+  MANUAL
+  AI
+}
+
+enum GenerationStatus {
+  QUEUED
+  GENERATED
+  FAILED
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  ABANDONED
+}
+
+model Tenant {
+  id        String   @id
+  name      String
+  createdAt DateTime @default(now())
+  users     User[]
+  settings  TenantSettings?
+}
+
+model TenantSettings {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  aiMonthlyQuota     Int      @default(1000)
+  aiUsedThisMonth    Int      @default(0)
+  aiQuotaResetAt     DateTime @default(now())
+  featureFlags       Json?
+  branding           Json?
+  syllabusConfig     Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model User {
+  id           String         @id @default(cuid())
+  tenantId     String
+  tenant       Tenant         @relation(fields: [tenantId], references: [id])
+  name         String
+  email        String
+  passwordHash String
+  role         Role
+  failedLoginAttempts Int     @default(0)
+  lockedUntil  DateTime?
+  emailVerifiedAt DateTime?
+  emailVerificationTokenHash String?
+  passwordChangedAt DateTime?
+  createdAt    DateTime       @default(now())
+  refreshTokens RefreshToken[]
+  sessions     UserSession[]
+  enrollments  Enrollment[]
+  attempts     Attempt[]
+  ratings      StudentTopicRating[]
+  flashcards   Flashcard[]
+  reviews      FlashcardReview[]
+  auditLogs    AuditLog[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, role])
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  sessionId  String?
+  session    UserSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  tokenHash  String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, userId])
+  @@index([tenantId, sessionId])
+}
+
+model UserSession {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  ipAddress  String?
+  deviceName String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  refreshTokens RefreshToken[]
+
+  @@index([tenantId, userId, revokedAt])
+}
+
+model Subject {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+  chapters  Chapter[]
+  enrollments Enrollment[]
+
+  @@unique([tenantId, name])
+}
+
+model Chapter {
+  id        String   @id @default(cuid())
+  tenantId  String
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+  name      String
+  createdAt DateTime @default(now())
+  topics    Topic[]
+
+  @@index([tenantId, subjectId])
+  @@unique([tenantId, subjectId, name])
+}
+
+model Topic {
+  id            String                  @id @default(cuid())
+  tenantId      String
+  chapterId     String
+  chapter       Chapter                 @relation(fields: [chapterId], references: [id])
+  name          String
+  createdAt     DateTime                @default(now())
+  prerequisites TopicPrerequisite[]     @relation("TopicPrerequisites")
+  dependents    TopicPrerequisite[]     @relation("TopicDependents")
+  questionMaps  QuestionTopicMap[]
+  studentRatings StudentTopicRating[]
+  questionRatings QuestionTopicRating[]
+  flashcards    Flashcard[]
+  resources     TopicResource[]
+
+  @@index([tenantId, chapterId])
+  @@unique([tenantId, chapterId, name])
+}
+
+model TopicResource {
+  id        String   @id @default(cuid())
+  tenantId  String
+  topicId   String
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  url       String
+  source    String   @default("TENANT_CURATED")
+  priority  Int      @default(1)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, topicId, isActive, priority])
+}
+
+model TopicPrerequisite {
+  id                  String @id @default(cuid())
+  tenantId            String
+  topicId             String
+  prerequisiteTopicId String
+  topic               Topic  @relation("TopicPrerequisites", fields: [topicId], references: [id])
+  prerequisiteTopic   Topic  @relation("TopicDependents", fields: [prerequisiteTopicId], references: [id])
+
+  @@unique([tenantId, topicId, prerequisiteTopicId])
+}
+
+model Question {
+  id                   String                  @id @default(cuid())
+  tenantId             String
+  stem                 String
+  explanation          String?
+  expectedSolveTimeSec Int                     @default(60)
+  source               QuestionSource          @default(MANUAL)
+  status               QuestionStatus          @default(DRAFT)
+  difficulty           Int                     @default(1200)
+  createdById          String?
+  createdAt            DateTime                @default(now())
+  options              QuestionOption[]
+  topicMaps            QuestionTopicMap[]
+  answers              AttemptAnswer[]
+  tags                 QuestionTag[]
+  questionRatings      QuestionTopicRating[]
+
+  @@index([tenantId, status])
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  tenantId   String
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  isCorrect  Boolean  @default(false)
+
+  @@index([tenantId, questionId])
+}
+
+model QuestionTag {
+  id         String @id @default(cuid())
+  tenantId   String
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag        String
+
+  @@index([tenantId, questionId])
+}
+
+model QuestionTopicMap {
+  id         String   @id @default(cuid())
+  tenantId   String
+  questionId String
+  topicId    String
+  weight     Float    @default(1)
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  topic      Topic    @relation(fields: [topicId], references: [id])
+
+  @@unique([tenantId, questionId, topicId])
+}
+
+model QuestionGenerationRequest {
+  id            String           @id @default(cuid())
+  tenantId      String
+  requestedById String
+  promptVersion String
+  payload       Json
+  status        GenerationStatus @default(QUEUED)
+  jobId         String?
+  resultQuestionId String?
+  error         String?
+  createdAt     DateTime         @default(now())
+}
+
+model Attempt {
+  id          String         @id @default(cuid())
+  tenantId    String
+  studentId   String
+  student     User           @relation(fields: [studentId], references: [id])
+  isDiagnostic Boolean       @default(true)
+  status      AttemptStatus  @default(IN_PROGRESS)
+  assignedQuestionIds String[] @default([])
+  startedAt   DateTime       @default(now())
+  submittedAt DateTime?
+  totalScore  Float          @default(0)
+  totalQuestions Int         @default(0)
+  answers     AttemptAnswer[]
+
+  @@index([tenantId, studentId])
+  @@index([tenantId, studentId, status])
+}
+
+model AttemptAnswer {
+  id               String   @id @default(cuid())
+  tenantId         String
+  attemptId        String
+  questionId       String
+  selectedOptionId String
+  isCorrect        Boolean  @default(false)
+  timeSpentSec     Int
+  confidence       Float?
+  createdAt        DateTime @default(now())
+  attempt          Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question         Question @relation(fields: [questionId], references: [id])
+
+  @@index([tenantId, attemptId])
+  @@unique([tenantId, attemptId, questionId])
+}
+
+model StudentTopicRating {
+  id         String   @id @default(cuid())
+  tenantId   String
+  studentId  String
+  topicId    String
+  rating     Float    @default(1200)
+  ratingDeviation Float @default(350)
+  speedIndex Float @default(1)
+  retentionIndex Float @default(1)
+  gamesPlayed Int     @default(0)
+  updatedAt  DateTime @updatedAt
+  student    User     @relation(fields: [studentId], references: [id])
+  topic      Topic    @relation(fields: [topicId], references: [id])
+
+  @@unique([tenantId, studentId, topicId])
+}
+
+model QuestionTopicRating {
+  id         String   @id @default(cuid())
+  tenantId   String
+  questionId String
+  topicId    String
+  rating     Float    @default(1200)
+  ratingDeviation Float @default(350)
+  gamesPlayed Int     @default(0)
+  updatedAt  DateTime @updatedAt
+  question   Question @relation(fields: [questionId], references: [id])
+  topic      Topic    @relation(fields: [topicId], references: [id])
+
+  @@unique([tenantId, questionId, topicId])
+}
+
+model RatingHistory {
+  id              String   @id @default(cuid())
+  tenantId        String
+  studentId       String
+  topicId         String
+  questionId      String
+  oldStudentRating Float
+  newStudentRating Float
+  oldQuestionRating Float
+  newQuestionRating Float
+  deltaStudent    Float
+  deltaQuestion   Float
+  speedDelta      Float?
+  retentionDelta  Float?
+  correct         Boolean
+  timeSpentSec    Int
+  createdAt       DateTime @default(now())
+
+  @@index([tenantId, studentId, topicId, createdAt])
+}
+
+model Flashcard {
+  id             String   @id @default(cuid())
+  tenantId       String
+  studentId      String
+  topicId        String
+  sourceQuestionId String?
+  prompt         String
+  correctValue   String?
+  explanation    String?
+  answer         String
+  repetition     Int      @default(0)
+  intervalDays   Int      @default(1)
+  easinessFactor Float    @default(2.5)
+  stability      Float    @default(1)
+  difficultyScore Float   @default(0.3)
+  lapseCount     Int      @default(0)
+  retentionScore Float    @default(1)
+  lastReviewedAt DateTime?
+  nextReviewAt   DateTime @default(now())
+  createdAt      DateTime @default(now())
+  student        User     @relation(fields: [studentId], references: [id])
+  topic          Topic    @relation(fields: [topicId], references: [id])
+  reviews        FlashcardReview[]
+
+  @@index([tenantId, studentId, nextReviewAt])
+  @@index([tenantId, studentId, sourceQuestionId])
+}
+
+model FlashcardReview {
+  id          String   @id @default(cuid())
+  tenantId    String
+  flashcardId String
+  studentId   String
+  quality     Int
+  reviewedAt  DateTime @default(now())
+  nextReviewAt DateTime
+  flashcard   Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+  student     User      @relation(fields: [studentId], references: [id])
+
+  @@index([tenantId, studentId, reviewedAt])
+}
+
+model LearningPlan {
+  id        String   @id @default(cuid())
+  tenantId  String
+  studentId String
+  createdAt DateTime @default(now())
+  items     LearningPlanItem[]
+
+  @@index([tenantId, studentId])
+}
+
+model LearningPlanItem {
+  id            String   @id @default(cuid())
+  tenantId      String
+  learningPlanId String
+  topicId       String
+  priority      Int      @default(1)
+  status        String   @default("PENDING")
+  learningPlan  LearningPlan @relation(fields: [learningPlanId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, learningPlanId])
+}
+
+model Enrollment {
+  id        String   @id @default(cuid())
+  tenantId  String
+  studentId String
+  subjectId String
+  createdAt DateTime @default(now())
+  student   User     @relation(fields: [studentId], references: [id])
+  subject   Subject  @relation(fields: [subjectId], references: [id])
+
+  @@unique([tenantId, studentId, subjectId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}

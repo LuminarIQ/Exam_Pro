@@ -1,0 +1,104 @@
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+
+api:
+  replicaCount: 2
+  image:
+    repository: REPLACE_ME_ECR_API
+    tag: latest
+    pullPolicy: IfNotPresent
+  containerPort: 3000
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  env:
+    NODE_ENV: production
+    PORT: "3000"
+    DEFAULT_TENANT_ID: public
+    CORS_ORIGIN: https://your-domain.com
+    AUTH_COOKIE_MODE: "true"
+    COOKIE_SECURE: "true"
+    COOKIE_SAMESITE: none
+    AUTH_RATE_LIMIT_MAX: "20"
+    AUTH_RATE_LIMIT_TTL_MS: "60000"
+    AI_JOB_ATTEMPTS: "3"
+    AI_JOB_BACKOFF_MS: "1000"
+    DEFAULT_AI_MONTHLY_QUOTA: "1000"
+    OTEL_ENABLED: "true"
+    OTEL_SERVICE_NAME: adaptive-tutor-api
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+    METRICS_PUBLIC: "false"
+    AI_QUOTA_RESET_INTERVAL_MS: "3600000"
+  secretEnv:
+    JWT_SECRET: change_me
+    COOKIE_SECRET: change_me
+    DATABASE_URL: postgresql://postgres:change_me@postgres:5432/adaptive_tutor?schema=public
+    REDIS_URL: redis://redis:6379
+    METRICS_TOKEN: change_me
+
+web:
+  replicaCount: 2
+  image:
+    repository: REPLACE_ME_ECR_WEB
+    tag: latest
+    pullPolicy: IfNotPresent
+  containerPort: 80
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+ingress:
+  enabled: true
+  className: alb
+  host: your-domain.com
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+
+hpa:
+  api:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+serviceMonitor:
+  enabled: false
+  namespace: monitoring
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
+networkPolicy:
+  enabled: false
+  allowMetricsFromMonitoringNamespace: true
+
+migration:
+  enabled: true
+  image:
+    repository: REPLACE_ME_ECR_API
+    tag: latest
+    pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""

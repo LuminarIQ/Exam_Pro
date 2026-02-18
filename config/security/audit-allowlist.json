@@ -1,0 +1,29 @@
+{
+  "failOnSeverities": ["high", "critical"],
+  "allow": [
+    {
+      "id": "1112255",
+      "reason": "Transitive via bcrypt->node-pre-gyp->tar. Awaiting patched upstream binary chain.",
+      "owner": "platform",
+      "reviewBy": "2026-03-31"
+    },
+    {
+      "id": "1112329",
+      "reason": "Transitive tar advisory in node-pre-gyp path; no direct runtime extraction use.",
+      "owner": "platform",
+      "reviewBy": "2026-03-31"
+    },
+    {
+      "id": "1112659",
+      "reason": "Transitive tar advisory in bcrypt install chain. Blocked from direct exploit path.",
+      "owner": "platform",
+      "reviewBy": "2026-03-31"
+    },
+    {
+      "id": "1113249",
+      "reason": "Latest tar transitive advisory through node-pre-gyp, pending ecosystem upgrade.",
+      "owner": "platform",
+      "reviewBy": "2026-03-31"
+    }
+  ]
+}

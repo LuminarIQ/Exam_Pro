@@ -1,0 +1,48 @@
+subject,chapter,topic,stem,explanation,difficulty,expectedSolveTimeSec,optionA,optionB,optionC,optionD,correctOption,source,status
+Biology,The Living World,Characteristics of Life,Which of the following is not a defining property of living organisms?,Growth can occur in non-living as well.,800,45,Metabolism,Reproduction,Growth,Consciousness,C,AI,Draft
+Biology,Biological Classification,Five Kingdom System,Five kingdom classification was proposed by:,Proposed by R.H. Whittaker.,800,45,Linnaeus,Whittaker,Haeckel,Margulis,B,AI,Draft
+Biology,Cell Structure,Cell Organelles,The powerhouse of the cell is:,Mitochondria produce ATP.,800,45,Ribosome,Mitochondria,Golgi body,Lysosome,B,AI,Draft
+Biology,Cell Structure,Ribosomes,Ribosomes are the site of:,Protein synthesis occurs here.,800,45,Respiration,Photosynthesis,Protein synthesis,Lipid synthesis,C,AI,Draft
+Biology,Cell Cycle,Meiosis,Crossing over occurs during which phase of meiosis?,Occurs during pachytene stage.,1200,60,Leptotene,Zygotene,Pachytene,Diplotene,C,AI,Draft
+Biology,Plant Physiology,Photosynthesis,Primary pigment involved in photosynthesis is:,Chlorophyll a acts as primary pigment.,800,45,Chlorophyll b,Carotene,Chlorophyll a,Xanthophyll,C,AI,Draft
+Biology,Plant Physiology,Respiration,Respiratory quotient (RQ) for carbohydrate is:,RQ = 1 for carbohydrates.,800,45,0.7,1,0.9,1.5,B,AI,Draft
+Biology,Plant Growth Regulators,Auxin,Auxin primarily promotes:,Auxin promotes cell elongation.,800,45,Cell division,Cell elongation,Fruit drop,Dormancy,B,AI,Draft
+Biology,Human Physiology,Blood,Blood clotting is initiated by:,Platelets initiate clotting.,800,45,RBC,WBC,Platelets,Plasma,C,AI,Draft
+Biology,Human Physiology,Heart,Double circulation means:,Blood passes twice through heart.,800,45,Two hearts,Two ventricles,Blood passes twice through heart,Oxygenated blood only,C,AI,Draft
+Biology,Human Physiology,Excretion,Functional unit of kidney is:,Nephron is structural unit.,800,45,Neuron,Nephron,Alveolus,Glomerulus,B,AI,Draft
+Biology,Human Physiology,Nervous System,The junction between two neurons is called:,Synapse connects neurons.,800,45,Axon,Dendrite,Synapse,Node,C,AI,Draft
+Biology,Human Physiology,Endocrine System,The master gland is:,Pituitary controls other glands.,800,45,Thyroid,Adrenal,Pituitary,Pineal,C,AI,Draft
+Biology,Reproduction in Plants,Pollination,Pollination is transfer of pollen from:,From anther to stigma.,800,45,Anther to ovary,Anther to stigma,Stigma to ovary,Ovary to stigma,B,AI,Draft
+Biology,Human Reproduction,Fertilization,Fertilization in humans occurs in:,Occurs in fallopian tube.,800,45,Uterus,Ovary,Fallopian tube,Cervix,C,AI,Draft
+Biology,Genetics,Mendelian Laws,Law of segregation states that:,Alleles separate during gamete formation.,1200,60,Traits blend,Alleles segregate,Genes mutate,Chromosomes duplicate,B,AI,Draft
+Biology,Genetics,Blood Groups,Universal donor blood group is:,O group lacks antigens.,800,45,A,B,AB,O,D,AI,Draft
+Biology,Molecular Basis of Inheritance,DNA Replication,DNA replication occurs during:,Occurs in S phase.,800,45,G1,S,G2,M,B,AI,Draft
+Biology,Molecular Basis of Inheritance,Genetic Code,Start codon is:,AUG codes for methionine.,800,45,UAA,UAG,AUG,UGA,C,AI,Draft
+Biology,Evolution,Natural Selection,Darwin proposed theory of:,Theory of natural selection.,800,45,Mutation,Natural selection,Inheritance,Hybridization,B,AI,Draft
+Biology,Biotechnology,Restriction Enzymes,Restriction enzymes are used to:,They cut DNA at specific sites.,1200,60,Join DNA,Cut DNA,Replicate DNA,Translate DNA,B,AI,Draft
+Biology,Biotechnology,PCR,PCR is used to:,Amplify DNA.,800,45,Cut DNA,Amplify DNA,Translate RNA,Detect proteins,B,AI,Draft
+Biology,Ecology,Ecosystem,Producers in ecosystem are:,Green plants synthesize food.,800,45,Carnivores,Herbivores,Green plants,Decomposers,C,AI,Draft
+Biology,Ecology,Energy Flow,Pyramid always upright is:,Energy pyramid always upright.,1200,60,Biomass,Numbers,Energy,All,C,AI,Draft
+Biology,Ecology,Biodiversity,Biodiversity hotspot has:,High species richness.,800,45,High rainfall,High species richness,High altitude,High temperature,B,AI,Draft
+Biology,Human Welfare,Immunity,Vaccines provide immunity by:,Stimulating immune response.,800,45,Killing pathogens,Producing toxins,Stimulating immune response,Destroying RBC,C,AI,Draft
+Biology,Cell Biology,Mitosis,Chromatids separate during:,Occurs in anaphase.,800,45,Prophase,Metaphase,Anaphase,Telophase,C,AI,Draft
+Biology,Genetics,Sex-linked Inheritance,Hemophilia is:,X-linked recessive disorder.,1200,60,Autosomal dominant,Autosomal recessive,X-linked recessive,Y-linked,C,AI,Draft
+Biology,Plant Physiology,Transpiration,Transpiration occurs mainly through:,Occurs through stomata.,800,45,Lenticels,Cuticle,Stomata,Roots,C,AI,Draft
+Biology,Plant Physiology,Mineral Nutrition,Magnesium is component of:,Central atom of chlorophyll.,800,45,ATP,Chlorophyll,DNA,RNA,B,AI,Draft
+Biology,Human Physiology,Muscles,Sliding filament theory explains:,Mechanism of muscle contraction.,1200,60,Respiration,Muscle contraction,Nerve impulse,Hormone action,B,AI,Draft
+Biology,Genetics,Chromosomal Disorders,Down syndrome is due to:,Trisomy 21.,800,45,Deletion,Inversion,Trisomy 21,Monosomy,C,AI,Draft
+Biology,Human Reproduction,Contraception,Oral pills prevent pregnancy by:,Prevent ovulation.,800,45,Blocking fertilization,Preventing ovulation,Destroying sperm,Blocking uterus,B,AI,Draft
+Biology,Molecular Biology,Transcription,Transcription forms:,DNA to RNA.,800,45,Protein,RNA,DNA,Enzyme,B,AI,Draft
+Biology,Ecology,Food Chain,Biomagnification increases along:,Increase at higher trophic levels.,1200,60,Producers,Consumers,Food chain,Decomposers,C,AI,Draft
+Biology,Plant Physiology,Plant Hormones,Ethylene promotes:,Fruit ripening.,800,45,Leaf fall,Fruit ripening,Dormancy,Cell division,B,AI,Draft
+Biology,Human Welfare,Diseases,Malaria is caused by:,Plasmodium protozoan.,800,45,Virus,Bacteria,Protozoan,Fungus,C,AI,Draft
+Biology,Genetics,Pleiotropy,One gene influencing multiple traits is:,Definition of pleiotropy.,1200,60,Polygenic inheritance,Pleiotropy,Codominance,Epistasis,B,AI,Draft
+Biology,Cell Structure,Plasma Membrane,Fluid mosaic model was proposed by:,Singer and Nicolson.,1200,60,Watson,Crick,Singer and Nicolson,Chargaff,C,AI,Draft
+Biology,Ecology,Conservation,In-situ conservation example:,National park.,800,45,Zoo,Seed bank,National park,Botanical garden,C,AI,Draft
+Biology,Biotechnology,Insulin Production,Insulin is produced using:,E. coli recombinant DNA.,1200,60,Virus,E. coli,Algae,Yeast,B,AI,Draft
+Biology,Human Physiology,Respiration,Oxygen transport occurs through:,Hemoglobin binds oxygen.,800,45,Plasma,Hemoglobin,Platelets,Lymph,B,AI,Draft
+Biology,Plant Reproduction,Double Fertilization,Double fertilization occurs in:,Characteristic of angiosperms.,800,45,Algae,Bryophytes,Gymnosperms,Angiosperms,D,AI,Draft
+Biology,Genetics,Hardy-Weinberg,Hardy-Weinberg equilibrium assumes:,"No mutation, migration, selection.",1600,75,Mutation,Natural selection,Large population with no evolutionary forces,Small population,C,AI,Draft
+Biology,Human Physiology,Endocrine System,Adrenaline is secreted by:,Adrenal medulla.,800,45,Pituitary,Thyroid,Adrenal medulla,Pancreas,C,AI,Draft
+Biology,Ecology,Productivity,Primary productivity refers to:,Rate of biomass production.,1200,60,Respiration rate,Biomass production,Decomposition,Energy loss,B,AI,Draft
+Biology,Genetics,Mutation,Mutation is:,Sudden heritable change.,1200,60,Gradual adaptation,Gene duplication,Sudden heritable change,Selective breeding,C,AI,Draft
