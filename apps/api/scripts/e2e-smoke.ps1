@@ -27,6 +27,21 @@ function Stop-RepoNodeProcesses {
 }
 
 function Invoke-PrismaGenerateWithRetry {
+  $clientProbeFile = Join-Path $env:TEMP "prisma-client-probe.js"
+  @'
+const { PrismaClient } = require('@prisma/client');
+const p = new PrismaClient();
+const ok = !!p.tenant && !!p.promptVersion;
+console.log(ok ? 'PRISMA_CLIENT_OK' : 'PRISMA_CLIENT_MISSING');
+p.$disconnect().finally(() => process.exit(ok ? 0 : 1));
+'@ | Set-Content -Path $clientProbeFile
+
+  node $clientProbeFile
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host "Prisma client already usable. Skipping prisma generate to avoid Windows lock contention." -ForegroundColor Yellow
+    return
+  }
+
   $max = 3
   for ($attempt = 1; $attempt -le $max; $attempt++) {
     pnpm --filter @app/api prisma:generate
@@ -40,7 +55,7 @@ function Invoke-PrismaGenerateWithRetry {
   }
 
   Write-Host "prisma generate failed after retries. Checking existing Prisma client usability..." -ForegroundColor Yellow
-  node -e "const { PrismaClient } = require('@prisma/client'); const p = new PrismaClient(); const ok = !!p.tenant && !!p.promptVersion; console.log(ok ? 'PRISMA_CLIENT_OK' : 'PRISMA_CLIENT_MISSING'); p.\$disconnect(); process.exit(ok ? 0 : 1);"
+  node $clientProbeFile
   if ($LASTEXITCODE -eq 0) {
     Write-Host "Using existing Prisma client due to Windows file-lock during generate." -ForegroundColor Yellow
     return
