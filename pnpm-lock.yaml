@@ -49,6 +49,9 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: ^1.30.0
         version: 1.39.0
+      '@pkg/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@prisma/client':
         specifier: ^6.2.1
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
