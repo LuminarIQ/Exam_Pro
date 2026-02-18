@@ -103,15 +103,22 @@ jobs:
 
       - name: Smoke test API health/readiness
         run: |
-          pnpm --filter @app/api start > /tmp/api.log 2>&1 &
+          PORT=3010 pnpm --filter @app/api start > /tmp/api.log 2>&1 &
+          ok=0
           for i in {1..30}; do
-            if curl -fsS http://localhost:3000/api/health >/dev/null; then
+            if curl -fsS http://localhost:3010/api/health >/dev/null; then
+              ok=1
               break
             fi
             sleep 2
           done
-          curl -fsS http://localhost:3000/api/health
-          curl -fsS http://localhost:3000/api/health/ready
+          if [ "$ok" -ne 1 ]; then
+            echo "Smoke startup failed. API log tail:"
+            tail -n 200 /tmp/api.log || true
+            exit 1
+          fi
+          curl -fsS http://localhost:3010/api/health
+          curl -fsS http://localhost:3010/api/health/ready
 
       - name: Upload API runtime log on failure
         if: failure()
