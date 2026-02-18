@@ -21,10 +21,10 @@ function Invoke-Api($method, $url, $headers = @{}, $body = $null) {
   return Invoke-RestMethod -Method $method -Uri $url -Headers $headers
 }
 
-function Assert-PortOpen($host, $port, $label) {
-  $probe = Test-NetConnection $host -Port $port -WarningAction SilentlyContinue
+function Assert-PortOpen($targetHost, $targetPort, $label) {
+  $probe = Test-NetConnection $targetHost -Port $targetPort -WarningAction SilentlyContinue
   if (-not $probe.TcpTestSucceeded) {
-    throw "$label is not reachable on ${host}:$port"
+    throw "$label is not reachable on ${targetHost}:$targetPort"
   }
 }
 
