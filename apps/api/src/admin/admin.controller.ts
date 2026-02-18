@@ -95,4 +95,9 @@ export class AdminController {
   tenantMetrics(@Req() req: any) {
     return this.admin.tenantMetrics(req.tenantId);
   }
+
+  @Get('ai-governance')
+  aiGovernance(@Req() req: any) {
+    return this.admin.aiGovernance(req.tenantId);
+  }
 }

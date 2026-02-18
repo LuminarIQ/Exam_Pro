@@ -127,6 +127,120 @@ export class AdminService {
     };
   }
 
+  async aiGovernance(tenantId: string) {
+    const now = new Date();
+    const windowDays = Number(process.env.AI_GOVERNANCE_WINDOW_DAYS || 30);
+    const since = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
+    const [settings, reqs, aiQuestions, statusLogs] = await Promise.all([
+      this.prisma.tenantSettings.findUnique({ where: { tenantId } }),
+      this.prisma.questionGenerationRequest.findMany({
+        where: { tenantId, createdAt: { gte: since } },
+        select: {
+          status: true,
+          provider: true,
+          aiConfidence: true,
+          hallucinationRisk: true,
+          plagiarismScore: true,
+          rubricCompliant: true,
+          dedupeDetected: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.question.findMany({
+        where: { tenantId, source: 'AI', createdAt: { gte: since } },
+        select: { id: true, createdAt: true, status: true },
+      }),
+      this.prisma.auditLog.findMany({
+        where: {
+          tenantId,
+          entityType: 'Question',
+          action: 'QUESTION_STATUS_UPDATE',
+          createdAt: { gte: since },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { entityId: true, createdAt: true, payload: true },
+      }),
+    ]);
+
+    const totals = {
+      queued: reqs.filter((r) => r.status === 'QUEUED').length,
+      generated: reqs.filter((r) => r.status === 'GENERATED').length,
+      failed: reqs.filter((r) => r.status === 'FAILED').length,
+      deduplicated: reqs.filter((r) => r.dedupeDetected).length,
+    };
+    const providerBreakdown = reqs.reduce<Record<string, number>>((acc, r) => {
+      const key = r.provider || 'unknown';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const confidences = reqs.map((r) => r.aiConfidence).filter((v): v is number => v !== null);
+    const hallucinations = reqs.map((r) => r.hallucinationRisk).filter((v): v is number => v !== null);
+    const plagiarisms = reqs.map((r) => r.plagiarismScore).filter((v): v is number => v !== null);
+    const rubricFailures = reqs.filter((r) => r.rubricCompliant === false).length;
+
+    const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+    const round = (n: number) => Number(n.toFixed(4));
+
+    const statusByQuestion = new Map<string, Date>();
+    for (const log of statusLogs) {
+      const status = (log.payload as any)?.status;
+      if ((status === 'APPROVED' || status === 'PUBLISHED') && !statusByQuestion.has(log.entityId)) {
+        statusByQuestion.set(log.entityId, log.createdAt);
+      }
+    }
+    const approvalLatenciesHours: number[] = aiQuestions
+      .map((q) => {
+        const approvedAt = statusByQuestion.get(q.id);
+        if (!approvedAt) return null;
+        return (approvedAt.getTime() - q.createdAt.getTime()) / (1000 * 60 * 60);
+      })
+      .filter((x): x is number => x !== null && x >= 0);
+
+    return {
+      windowDays,
+      usage: {
+        used: settings?.aiUsedThisMonth ?? 0,
+        limit: settings?.aiMonthlyQuota ?? Number(process.env.DEFAULT_AI_MONTHLY_QUOTA || 1000),
+      },
+      generation: {
+        total: reqs.length,
+        ...totals,
+        providerBreakdown,
+      },
+      governance: {
+        averageAiConfidence: round(avg(confidences)),
+        averageHallucinationRisk: round(avg(hallucinations)),
+        averagePlagiarismScore: round(avg(plagiarisms)),
+        rubricFailureRate: reqs.length ? round(rubricFailures / reqs.length) : 0,
+        highRiskRate: reqs.length
+          ? round(
+              reqs.filter(
+                (r) =>
+                  (r.hallucinationRisk ?? 0) >= 0.5 ||
+                  (r.plagiarismScore ?? 0) >= 0.75 ||
+                  r.rubricCompliant === false,
+              ).length / reqs.length,
+            )
+          : 0,
+      },
+      approval: {
+        aiQuestionsCreated: aiQuestions.length,
+        approvedOrPublished: aiQuestions.filter((q) => q.status === 'APPROVED' || q.status === 'PUBLISHED').length,
+        approvalLatencyHours: {
+          avg: round(avg(approvalLatenciesHours)),
+          p95: approvalLatenciesHours.length
+            ? round(
+                [...approvalLatenciesHours].sort((a, b) => a - b)[
+                  Math.min(approvalLatenciesHours.length - 1, Math.floor(approvalLatenciesHours.length * 0.95))
+                ],
+              )
+            : 0,
+        },
+      },
+    };
+  }
+
   async importQuestionBankCsv(tenantId: string, actorId: string, csvText: string) {
     const rows = this.parseCsv(csvText);
     if (!rows.length) {
