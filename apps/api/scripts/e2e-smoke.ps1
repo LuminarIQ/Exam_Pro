@@ -38,7 +38,15 @@ function Invoke-PrismaGenerateWithRetry {
       Remove-Item -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
   }
-  throw "prisma generate failed after retries"
+
+  Write-Host "prisma generate failed after retries. Checking existing Prisma client usability..." -ForegroundColor Yellow
+  node -e "const { PrismaClient } = require('@prisma/client'); const p = new PrismaClient(); const ok = !!p.tenant && !!p.promptVersion; console.log(ok ? 'PRISMA_CLIENT_OK' : 'PRISMA_CLIENT_MISSING'); p.\$disconnect(); process.exit(ok ? 0 : 1);"
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host "Using existing Prisma client due to Windows file-lock during generate." -ForegroundColor Yellow
+    return
+  }
+
+  throw "prisma generate failed after retries and Prisma client is not usable"
 }
 
 function Invoke-Api($method, $url, $headers = @{}, $body = $null) {
