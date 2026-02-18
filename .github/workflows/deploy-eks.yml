@@ -6,7 +6,57 @@ on:
     branches: ["main", "master"]
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Check required deploy secrets
+        id: check
+        env:
+          AWS_IAM_ROLE_ARN: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          COOKIE_SECRET: ${{ secrets.COOKIE_SECRET }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+        run: |
+          missing=""
+          for key in AWS_IAM_ROLE_ARN JWT_SECRET COOKIE_SECRET DATABASE_URL REDIS_URL; do
+            value="${!key}"
+            if [ -z "$value" ]; then
+              missing="$missing $key"
+            fi
+          done
+
+          if [ -n "$missing" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Missing required deploy secrets:$missing"
+            {
+              echo "### Deploy preflight"
+              echo ""
+              echo "Status: FAIL"
+              echo ""
+              echo "Missing required deploy secrets:"
+              for item in $missing; do
+                echo "- \`$item\`"
+              done
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "All required deploy secrets are present."
+          {
+            echo "### Deploy preflight"
+            echo ""
+            echo "Status: PASS"
+            echo ""
+            echo "All required deploy secrets are present."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.ready == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -39,10 +89,11 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - name: Setup pnpm (corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.0.0 --activate
+          pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile=false
