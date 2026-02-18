@@ -31,6 +31,10 @@ export function AdminPage() {
     queryKey: ['tenant-metrics'],
     queryFn: async () => (await api.get('/admin/tenant-metrics')).data,
   });
+  const aiGovernance = useQuery({
+    queryKey: ['admin-ai-governance'],
+    queryFn: async () => (await api.get('/admin/ai-governance')).data,
+  });
   const questions = useQuery({
     queryKey: ['admin-questions'],
     queryFn: async () => (await api.get('/admin/questions')).data,
@@ -151,6 +155,80 @@ export function AdminPage() {
         <div className="rounded border p-3">
           <p className="text-sm text-slate-500">Draft Questions</p>
           <p className="text-xl font-semibold">{metrics.data?.questionGovernance?.draftQuestions ?? 0}</p>
+        </div>
+      </section>
+
+      <section className="rounded bg-white p-4 shadow">
+        <h3 className="font-medium">AI Governance</h3>
+        <div className="mt-3 grid grid-cols-4 gap-3">
+          <div className="rounded border p-3">
+            <p className="text-sm text-slate-500">Requests ({aiGovernance.data?.windowDays ?? 30}d)</p>
+            <p className="text-xl font-semibold">{aiGovernance.data?.generation?.total ?? 0}</p>
+          </div>
+          <div className="rounded border p-3">
+            <p className="text-sm text-slate-500">Generated / Failed</p>
+            <p className="text-xl font-semibold">
+              {aiGovernance.data?.generation?.generated ?? 0} / {aiGovernance.data?.generation?.failed ?? 0}
+            </p>
+          </div>
+          <div className="rounded border p-3">
+            <p className="text-sm text-slate-500">Rubric Failure Rate</p>
+            <p className="text-xl font-semibold">
+              {Math.round((aiGovernance.data?.governance?.rubricFailureRate ?? 0) * 100)}%
+            </p>
+          </div>
+          <div className="rounded border p-3">
+            <p className="text-sm text-slate-500">Approval Latency (avg hrs)</p>
+            <p className="text-xl font-semibold">
+              {aiGovernance.data?.approval?.approvalLatencyHours?.avg ?? 0}
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-3">
+          <div className="rounded border p-3 text-sm">
+            <p className="text-slate-500">AI Confidence</p>
+            <p className="font-semibold">{aiGovernance.data?.governance?.averageAiConfidence ?? 0}</p>
+          </div>
+          <div className="rounded border p-3 text-sm">
+            <p className="text-slate-500">Hallucination Risk</p>
+            <p className="font-semibold">{aiGovernance.data?.governance?.averageHallucinationRisk ?? 0}</p>
+          </div>
+          <div className="rounded border p-3 text-sm">
+            <p className="text-slate-500">Plagiarism Score</p>
+            <p className="font-semibold">{aiGovernance.data?.governance?.averagePlagiarismScore ?? 0}</p>
+          </div>
+          <div className="rounded border p-3 text-sm">
+            <p className="text-slate-500">High Risk Rate</p>
+            <p className="font-semibold">
+              {Math.round((aiGovernance.data?.governance?.highRiskRate ?? 0) * 100)}%
+            </p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <p className="mb-2 text-sm font-medium">Provider Breakdown</p>
+          <table className="w-full border text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="border px-2 py-1 text-left">Provider</th>
+                <th className="border px-2 py-1 text-right">Requests</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(aiGovernance.data?.generation?.providerBreakdown || {}).map(([provider, count]) => (
+                <tr key={provider}>
+                  <td className="border px-2 py-1">{provider}</td>
+                  <td className="border px-2 py-1 text-right">{String(count)}</td>
+                </tr>
+              ))}
+              {!Object.keys(aiGovernance.data?.generation?.providerBreakdown || {}).length && (
+                <tr>
+                  <td className="border px-2 py-2 text-slate-500" colSpan={2}>
+                    No provider data.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 

@@ -6,6 +6,7 @@ export function TeacherReviewQueuePage() {
   const qc = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<any>(null);
+  const [rubricByQuestion, setRubricByQuestion] = useState<Record<string, any>>({});
 
   const { data } = useQuery({
     queryKey: ['review-queue'],
@@ -22,9 +23,25 @@ export function TeacherReviewQueuePage() {
     ),
   );
 
+  async function validateRubric(questionId: string) {
+    const { data } = await api.get(`/questions/${questionId}/rubric-validate`);
+    setRubricByQuestion((prev) => ({ ...prev, [questionId]: data }));
+    return data;
+  }
+
   async function approve(questionId: string, publish = false) {
+    const rubric = await validateRubric(questionId);
+    if (!rubric.valid) {
+      alert('Rubric validation failed. Fix the draft before approval.');
+      return;
+    }
     await api.post('/questions/approve', { questionId, publish });
     qc.invalidateQueries({ queryKey: ['review-queue'] });
+    setRubricByQuestion((prev) => {
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
   }
 
   async function reject(questionId: string) {
@@ -153,6 +170,9 @@ export function TeacherReviewQueuePage() {
                 ))}
               </ul>
               <div className="mt-3 flex flex-wrap gap-2">
+                <button className="rounded bg-amber-600 px-3 py-1 text-white" onClick={() => validateRubric(q.id)}>
+                  Validate Rubric
+                </button>
                 <button className="rounded bg-slate-700 px-3 py-1 text-white" onClick={() => startEdit(q)}>
                   Edit
                 </button>
@@ -166,6 +186,20 @@ export function TeacherReviewQueuePage() {
                   Reject
                 </button>
               </div>
+              {rubricByQuestion[q.id] && (
+                <div className="mt-3 rounded border p-3 text-sm">
+                  <p className={rubricByQuestion[q.id].valid ? 'text-emerald-700' : 'text-rose-700'}>
+                    Rubric: {rubricByQuestion[q.id].valid ? 'PASS' : 'FAIL'} | Score {rubricByQuestion[q.id].score}
+                  </p>
+                  {!rubricByQuestion[q.id].valid && (
+                    <ul className="mt-1 list-disc pl-5 text-rose-700">
+                      {rubricByQuestion[q.id].issues.map((issue: string) => (
+                        <li key={issue}>{issue}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>

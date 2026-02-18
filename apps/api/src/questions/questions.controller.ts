@@ -39,6 +39,12 @@ export class QuestionsController {
     return this.questionsService.updateDraft(req.tenantId, id, body);
   }
 
+  @Get(':id/rubric-validate')
+  @Roles('TEACHER', 'ADMIN')
+  rubricValidate(@Req() req: any, @Param('id') id: string) {
+    return this.questionsService.validateRubric(req.tenantId, id);
+  }
+
   @Post('approve')
   @Roles('TEACHER', 'ADMIN')
   approve(@Req() req: any, @Body(new ZodValidationPipe(ApproveQuestionSchema)) body: any) {
