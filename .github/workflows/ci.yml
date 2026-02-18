@@ -39,8 +39,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adaptive_tutor?schema=public
-      REDIS_URL: redis://localhost:6379
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/adaptive_tutor?schema=public
+      REDIS_URL: redis://127.0.0.1:6379
       JWT_SECRET: ci-secret
       DEFAULT_TENANT_ID: public
       AUTH_COOKIE_MODE: "false"
