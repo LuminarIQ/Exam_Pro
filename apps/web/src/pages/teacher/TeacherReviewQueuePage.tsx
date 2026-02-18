@@ -7,6 +7,7 @@ export function TeacherReviewQueuePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<any>(null);
   const [rubricByQuestion, setRubricByQuestion] = useState<Record<string, any>>({});
+  const [showOnlyFailing, setShowOnlyFailing] = useState(false);
 
   const { data } = useQuery({
     queryKey: ['review-queue'],
@@ -29,8 +30,13 @@ export function TeacherReviewQueuePage() {
     return data;
   }
 
+  async function ensureRubric(questionId: string) {
+    if (rubricByQuestion[questionId]) return rubricByQuestion[questionId];
+    return validateRubric(questionId);
+  }
+
   async function approve(questionId: string, publish = false) {
-    const rubric = await validateRubric(questionId);
+    const rubric = await ensureRubric(questionId);
     if (!rubric.valid) {
       alert('Rubric validation failed. Fix the draft before approval.');
       return;
@@ -78,10 +84,26 @@ export function TeacherReviewQueuePage() {
     qc.invalidateQueries({ queryKey: ['review-queue'] });
   }
 
+  const rows = (data || []).filter((q: any) => {
+    if (!showOnlyFailing) return true;
+    const r = rubricByQuestion[q.id];
+    return r ? !r.valid : true;
+  });
+
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-semibold">Teacher Review Queue</h2>
-      {(data || []).map((q: any) => (
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-semibold">Teacher Review Queue</h2>
+        <label className="flex items-center gap-2 rounded border bg-white px-3 py-2 text-sm shadow-sm">
+          <input
+            type="checkbox"
+            checked={showOnlyFailing}
+            onChange={(e) => setShowOnlyFailing(e.target.checked)}
+          />
+          Show only rubric-failing drafts
+        </label>
+      </div>
+      {rows.map((q: any) => (
         <div key={q.id} className="rounded bg-white p-4 shadow">
           {editingId === q.id && draft ? (
             <div className="space-y-3">
@@ -160,8 +182,18 @@ export function TeacherReviewQueuePage() {
             </div>
           ) : (
             <>
-              <p className="font-medium">{q.stem}</p>
-              <p className="text-sm text-slate-600">Difficulty {q.difficulty} | Source {q.source}</p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium">{q.stem}</p>
+                  <p className="text-sm text-slate-600">Difficulty {q.difficulty} | Source {q.source}</p>
+                </div>
+                <div className="shrink-0 rounded border px-2 py-1 text-sm">
+                  <p className="text-xs text-slate-500">Rubric score</p>
+                  <p className={rubricByQuestion[q.id]?.valid ? 'font-semibold text-emerald-700' : 'font-semibold text-rose-700'}>
+                    {rubricByQuestion[q.id] ? rubricByQuestion[q.id].score : '--'}
+                  </p>
+                </div>
+              </div>
               <ul className="mt-2 list-disc pl-5 text-sm">
                 {q.options.map((o: any) => (
                   <li key={o.id}>
@@ -204,7 +236,7 @@ export function TeacherReviewQueuePage() {
           )}
         </div>
       ))}
-      {!data?.length && <p className="text-sm text-slate-600">No draft questions.</p>}
+      {!rows?.length && <p className="text-sm text-slate-600">No draft questions matching filter.</p>}
     </div>
   );
 }
