@@ -2,7 +2,9 @@ name: Deploy-EKS
 
 on:
   workflow_dispatch:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: ["main", "master"]
 
 concurrency:
@@ -60,7 +62,7 @@ jobs:
 
   deploy:
     needs: preflight
-    if: ${{ needs.preflight.outputs.ready == 'true' }}
+    if: ${{ needs.preflight.outputs.ready == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -74,10 +76,13 @@ jobs:
       EKS_CLUSTER_NAME: adaptive-tutor-eks
       HELM_RELEASE: adaptive-tutor
       HELM_NAMESPACE: adaptive-tutor
+      COMMIT_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.COMMIT_SHA }}
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -106,7 +111,7 @@ jobs:
       - name: Build and push API image
         env:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ env.COMMIT_SHA }}
         run: |
           docker build -f apps/api/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY_API:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_API:$IMAGE_TAG
@@ -114,7 +119,7 @@ jobs:
       - name: Build and push Web image
         env:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ env.COMMIT_SHA }}
         run: |
           docker build -f apps/web/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY_WEB:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_WEB:$IMAGE_TAG
@@ -134,7 +139,7 @@ jobs:
       - name: Deploy with Helm
         env:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ env.COMMIT_SHA }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           COOKIE_SECRET: ${{ secrets.COOKIE_SECRET }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
