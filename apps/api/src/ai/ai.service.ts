@@ -1,4 +1,10 @@
-import { ForbiddenException, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  OnModuleDestroy,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { QuestionsService } from '../questions/questions.service';
 import { Job, Queue, Worker } from 'bullmq';
@@ -382,10 +388,10 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   private readonly connection = {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
   };
-  private readonly queue = new Queue('generate-question', { connection: this.connection });
-  private readonly dlq = new Queue('generate-question-dlq', { connection: this.connection });
+  private queue: Queue | null = null;
+  private dlq: Queue | null = null;
   private readonly provider: IAIProvider;
-  private readonly worker: Worker;
+  private worker: Worker | null = null;
   private quotaResetTimer?: NodeJS.Timeout;
 
   constructor(
@@ -394,61 +400,74 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     private readonly metrics: MetricsService,
   ) {
     this.provider = this.buildProvider();
-    this.worker = new Worker(
-      'generate-question',
-      async (job: Job) => {
-        const { requestId, tenantId, topicIds, userId } = job.data as any;
-        const generated = await this.provider.generateQuestion({ topicIds });
-        const q = await this.questionsService.create(tenantId, userId, {
-          topicIds,
-          stem: generated.stem,
-          explanation: generated.explanation,
-          expectedSolveTimeSec: 60,
-          options: generated.options,
-          source: 'AI',
-          difficulty: generated.difficulty,
-        });
-
-        await this.prisma.questionGenerationRequest.update({
-          where: { id: requestId },
-          data: { status: 'GENERATED', resultQuestionId: q.id },
-        });
-        this.metrics.aiJobsTotal.inc({ tenant: tenantId, status: 'generated' });
-      },
-      { connection: this.connection },
-    );
-
-    this.worker.on('failed', async (job, err) => {
-      if (!job) return;
-      const maxAttempts = Number(process.env.AI_JOB_ATTEMPTS || 3);
-      if (job.attemptsMade < maxAttempts) return;
-
-      const { requestId, tenantId } = job.data as any;
-      await this.prisma.questionGenerationRequest.update({
-        where: { id: requestId },
-        data: { status: 'FAILED', error: err.message },
-      });
-      this.metrics.aiJobsTotal.inc({ tenant: tenantId, status: 'failed' });
-
-      await this.dlq.add(
-        'failed-generate',
-        {
-          requestId,
-          tenantId,
-          payload: job.data,
-          reason: err.message,
-          failedAt: new Date().toISOString(),
-        },
-        { removeOnComplete: true, removeOnFail: false },
-      );
-    });
   }
 
   onModuleInit() {
+    this.initQueueInfra();
     const intervalMs = Number(process.env.AI_QUOTA_RESET_INTERVAL_MS || 60 * 60 * 1000);
     this.quotaResetTimer = setInterval(() => {
       void this.resetExpiredTenantQuotas();
     }, intervalMs);
+  }
+
+  private initQueueInfra() {
+    try {
+      this.queue = new Queue('generate-question', { connection: this.connection });
+      this.dlq = new Queue('generate-question-dlq', { connection: this.connection });
+      this.worker = new Worker(
+        'generate-question',
+        async (job: Job) => {
+          const { requestId, tenantId, topicIds, userId } = job.data as any;
+          const generated = await this.provider.generateQuestion({ topicIds });
+          const q = await this.questionsService.create(tenantId, userId, {
+            topicIds,
+            stem: generated.stem,
+            explanation: generated.explanation,
+            expectedSolveTimeSec: 60,
+            options: generated.options,
+            source: 'AI',
+            difficulty: generated.difficulty,
+          });
+
+          await this.prisma.questionGenerationRequest.update({
+            where: { id: requestId },
+            data: { status: 'GENERATED', resultQuestionId: q.id },
+          });
+          this.metrics.aiJobsTotal.inc({ tenant: tenantId, status: 'generated' });
+        },
+        { connection: this.connection },
+      );
+
+      this.worker.on('failed', async (job, err) => {
+        if (!job || !this.dlq) return;
+        const maxAttempts = Number(process.env.AI_JOB_ATTEMPTS || 3);
+        if (job.attemptsMade < maxAttempts) return;
+
+        const { requestId, tenantId } = job.data as any;
+        await this.prisma.questionGenerationRequest.update({
+          where: { id: requestId },
+          data: { status: 'FAILED', error: err.message },
+        });
+        this.metrics.aiJobsTotal.inc({ tenant: tenantId, status: 'failed' });
+
+        await this.dlq.add(
+          'failed-generate',
+          {
+            requestId,
+            tenantId,
+            payload: job.data,
+            reason: err.message,
+            failedAt: new Date().toISOString(),
+          },
+          { removeOnComplete: true, removeOnFail: false },
+        );
+      });
+    } catch (error) {
+      console.error('AI queue init failed; continuing in degraded mode', error);
+      this.queue = null;
+      this.dlq = null;
+      this.worker = null;
+    }
   }
 
   private async resetExpiredTenantQuotas() {
@@ -515,6 +534,10 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
+    if (!this.queue) {
+      throw new ServiceUnavailableException('AI queue unavailable');
+    }
+
     const job = await this.queue.add('generate', {
       requestId: request.id,
       tenantId,
@@ -537,6 +560,15 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   }
 
   async queueMetrics() {
+    if (!this.queue || !this.dlq) {
+      return {
+        queue: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 },
+        dlq: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 },
+        recentFailed: [],
+        recentDeadLetters: [],
+      };
+    }
+
     const counts = await this.queue.getJobCounts(
       'waiting',
       'active',
@@ -695,8 +727,8 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     if (this.quotaResetTimer) clearInterval(this.quotaResetTimer);
-    await this.worker.close();
-    await this.queue.close();
-    await this.dlq.close();
+    if (this.worker) await this.worker.close();
+    if (this.queue) await this.queue.close();
+    if (this.dlq) await this.dlq.close();
   }
 }
