@@ -26,6 +26,7 @@ export class HealthController {
   @Get('ready')
   async ready(@Res() res: Response) {
     const checks: Record<string, string> = { db: 'down', redis: 'down' };
+    const requireRedis = process.env.READINESS_REQUIRE_REDIS === 'true';
 
     try {
       await this.prisma.$queryRaw`SELECT 1`;
@@ -48,13 +49,13 @@ export class HealthController {
       redis.disconnect();
     }
 
-    const ready = checks.db === 'up' && checks.redis === 'up';
+    const ready = checks.db === 'up' && (!requireRedis || checks.redis === 'up');
     this.metrics.serviceReadiness.set({ component: 'db' }, checks.db === 'up' ? 1 : 0);
     this.metrics.serviceReadiness.set({ component: 'redis' }, checks.redis === 'up' ? 1 : 0);
     this.metrics.serviceReadiness.set({ component: 'api' }, ready ? 1 : 0);
     if (!ready) {
-      return res.status(503).json({ ready, checks });
+      return res.status(503).json({ ready, checks, requireRedis });
     }
-    return res.status(200).json({ ready, checks });
+    return res.status(200).json({ ready, checks, requireRedis });
   }
 }
