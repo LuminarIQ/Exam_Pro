@@ -6,7 +6,7 @@
     "dev": "pnpm --filter @pkg/shared build && ts-node -r tsconfig-paths/register src/main.ts",
     "dev:clean": "powershell -ExecutionPolicy Bypass -File ./scripts/kill-port.ps1 -Port 3000 && pnpm dev",
     "build": "nest build",
-    "start": "node dist/apps/api/src/main.js",
+    "start": "node scripts/start-entrypoint.js",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "jest",
     "test:ci": "jest --coverage --runInBand",

@@ -34,4 +34,4 @@ COPY --from=build /app/node_modules node_modules
 WORKDIR /app/apps/api
 EXPOSE 3000
 
-CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/apps/api/src/main.js"]
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node scripts/start-entrypoint.js"]
