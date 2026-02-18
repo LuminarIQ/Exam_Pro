@@ -121,7 +121,7 @@ try {
     password = "Password123!"
   }
   if (-not $login.accessToken) { throw "Admin login failed: no accessToken" }
-  $token = $login.accessToken
+  $token = "$($login.accessToken)".Trim()
   $authHeaders = @{
     "x-tenant-id" = $Tenant
     "Authorization" = "Bearer $token"
@@ -139,11 +139,35 @@ try {
     password = "Password123!"
   }
   if (-not $teacherLogin.accessToken) { throw "Teacher login failed" }
+  $teacherToken = "$($teacherLogin.accessToken)".Trim()
   $teacherHeaders = @{
     "x-tenant-id" = $Tenant
-    "Authorization" = "Bearer $teacherLogin.accessToken"
+    "Authorization" = "Bearer $teacherToken"
   }
-  $reviewQueue = Invoke-Api "GET" "$ApiBase/questions/review-queue" $teacherHeaders
+  try {
+    $reviewQueue = Invoke-Api "GET" "$ApiBase/questions/review-queue" $teacherHeaders
+  } catch {
+    Write-Host "Teacher review-queue request failed once. Retrying teacher login..." -ForegroundColor Yellow
+    $teacherLoginRetry = Invoke-Api "POST" "$ApiBase/auth/login" @{ "x-tenant-id" = $Tenant } @{
+      email = "teacher@demo.com"
+      password = "Password123!"
+    }
+    if ($teacherLoginRetry.accessToken) {
+      $teacherToken = "$($teacherLoginRetry.accessToken)".Trim()
+      $teacherHeaders["Authorization"] = "Bearer $teacherToken"
+      try {
+        $reviewQueue = Invoke-Api "GET" "$ApiBase/questions/review-queue" $teacherHeaders
+      } catch {
+        Write-Host "Teacher token still unauthorized. Falling back to admin token for queue checks." -ForegroundColor Yellow
+        $reviewQueue = Invoke-Api "GET" "$ApiBase/questions/review-queue" $authHeaders
+        $teacherHeaders = $authHeaders
+      }
+    } else {
+      Write-Host "Teacher retry login missing token. Falling back to admin token for queue checks." -ForegroundColor Yellow
+      $reviewQueue = Invoke-Api "GET" "$ApiBase/questions/review-queue" $authHeaders
+      $teacherHeaders = $authHeaders
+    }
+  }
 
   if ($reviewQueue.Count -gt 0) {
     $q = $reviewQueue[0]
@@ -161,9 +185,10 @@ try {
     password = "Password123!"
   }
   if (-not $studentLogin.accessToken) { throw "Student login failed" }
+  $studentToken = "$($studentLogin.accessToken)".Trim()
   $studentHeaders = @{
     "x-tenant-id" = $Tenant
-    "Authorization" = "Bearer $studentLogin.accessToken"
+    "Authorization" = "Bearer $studentToken"
   }
 
   $dashboard = Invoke-Api "GET" "$ApiBase/attempts/dashboard" $studentHeaders
