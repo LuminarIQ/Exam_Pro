@@ -40,27 +40,27 @@ $webLogErr = Join-Path $env:TEMP "adaptive-web-dev.err.log"
 
 try {
   Write-Step "0) Preflight Docker daemon"
-  docker version | Out-Host
+  docker version
   Assert-LastExitCode "Docker daemon check"
 
   Write-Step "1) Start infra (Postgres + Redis)"
-  docker compose -f infra/docker/docker-compose.yml up -d | Out-Host
+  docker compose -f infra/docker/docker-compose.yml up -d
   Assert-LastExitCode "Docker compose up"
-  docker compose -f infra/docker/docker-compose.yml ps | Out-Host
+  docker compose -f infra/docker/docker-compose.yml ps
   Assert-LastExitCode "Docker compose ps"
   Assert-PortOpen "localhost" 5433 "Postgres"
   Assert-PortOpen "localhost" 6379 "Redis"
 
   Write-Step "2) Install deps + prisma generate"
-  pnpm install | Out-Host
+  pnpm install
   Assert-LastExitCode "pnpm install"
-  pnpm --filter @app/api prisma:generate | Out-Host
+  pnpm --filter @app/api prisma:generate
   Assert-LastExitCode "prisma generate"
 
   Write-Step "3) Migrate + seed"
-  pnpm --filter @app/api exec prisma migrate deploy | Out-Host
+  pnpm --filter @app/api exec prisma migrate deploy
   Assert-LastExitCode "prisma migrate deploy"
-  pnpm --filter @app/api prisma:seed | Out-Host
+  pnpm --filter @app/api prisma:seed
   Assert-LastExitCode "prisma seed"
 
   Write-Step "4) Start API + Web (background)"
