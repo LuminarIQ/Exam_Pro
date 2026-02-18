@@ -10,6 +10,12 @@ export class TenantMiddleware implements NestMiddleware {
   constructor(private readonly prisma?: PrismaService) {}
 
   async use(req: Request & { tenantId?: string }, _res: Response, next: NextFunction) {
+    if (this.shouldBypass(req)) {
+      req.tenantId = (process.env.DEFAULT_TENANT_ID || 'public').trim().toLowerCase();
+      next();
+      return;
+    }
+
     const raw = ((req.headers['x-tenant-id'] as string) || process.env.DEFAULT_TENANT_ID || 'public').trim();
     const tenantId = raw.toLowerCase();
     if (!tenantId) {
@@ -27,5 +33,13 @@ export class TenantMiddleware implements NestMiddleware {
 
     req.tenantId = tenantId;
     next();
+  }
+
+  private shouldBypass(req: Request) {
+    const path = (req.originalUrl || req.url || '').split('?')[0].toLowerCase();
+    return (
+      path.startsWith('/api/health') ||
+      path.startsWith('/health')
+    );
   }
 }
