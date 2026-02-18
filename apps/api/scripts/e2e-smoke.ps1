@@ -75,10 +75,11 @@ $WebBase = "http://localhost:5173"
 $Tenant = "public"
 $apiProc = $null
 $webProc = $null
-$apiLogOut = Join-Path $env:TEMP "adaptive-api-dev.out.log"
-$apiLogErr = Join-Path $env:TEMP "adaptive-api-dev.err.log"
-$webLogOut = Join-Path $env:TEMP "adaptive-web-dev.out.log"
-$webLogErr = Join-Path $env:TEMP "adaptive-web-dev.err.log"
+$runStamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
+$apiLogOut = Join-Path $env:TEMP "adaptive-api-dev-$runStamp.out.log"
+$apiLogErr = Join-Path $env:TEMP "adaptive-api-dev-$runStamp.err.log"
+$webLogOut = Join-Path $env:TEMP "adaptive-web-dev-$runStamp.out.log"
+$webLogErr = Join-Path $env:TEMP "adaptive-web-dev-$runStamp.err.log"
 
 try {
   Write-Step "0) Preflight Docker daemon"
@@ -105,10 +106,6 @@ try {
   Assert-LastExitCode "prisma seed"
 
   Write-Step "4) Start API + Web (background)"
-  if (Test-Path $apiLogOut) { Remove-Item $apiLogOut -Force }
-  if (Test-Path $apiLogErr) { Remove-Item $apiLogErr -Force }
-  if (Test-Path $webLogOut) { Remove-Item $webLogOut -Force }
-  if (Test-Path $webLogErr) { Remove-Item $webLogErr -Force }
   $apiProc = Start-Process -FilePath "pnpm.cmd" -ArgumentList "--filter @app/api dev" -PassThru -WindowStyle Hidden -RedirectStandardOutput $apiLogOut -RedirectStandardError $apiLogErr
   $webProc = Start-Process -FilePath "pnpm.cmd" -ArgumentList "--filter @app/web dev" -PassThru -WindowStyle Hidden -RedirectStandardOutput $webLogOut -RedirectStandardError $webLogErr
 
