@@ -117,7 +117,26 @@ jobs:
             tail -n 200 /tmp/api.log || true
             exit 1
           fi
+          echo "Health response:"
           curl -fsS http://localhost:3010/api/health
+
+          ready=0
+          for i in {1..30}; do
+            if curl -fsS http://localhost:3010/api/health/ready >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "Readiness check failed after retries."
+            echo "Readiness payload:"
+            curl -sS http://localhost:3010/api/health/ready || true
+            echo "API log tail:"
+            tail -n 200 /tmp/api.log || true
+            exit 1
+          fi
+          echo "Readiness response:"
           curl -fsS http://localhost:3010/api/health/ready
 
       - name: Upload API runtime log on failure
