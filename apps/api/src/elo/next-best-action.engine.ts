@@ -39,6 +39,17 @@ export class NextBestActionEngine {
     const avgAccuracy = recentHistory.length
       ? recentHistory.filter((h) => h.correct).length / recentHistory.length
       : 0.5;
+    const recentSlice = recentHistory.slice(0, 10);
+    const previousSlice = recentHistory.slice(10, 20);
+    const recentAccuracy = recentSlice.length
+      ? recentSlice.filter((h) => h.correct).length / recentSlice.length
+      : avgAccuracy;
+    const previousAccuracy = previousSlice.length
+      ? previousSlice.filter((h) => h.correct).length / previousSlice.length
+      : recentAccuracy;
+    const trendDelta = recentAccuracy - previousAccuracy;
+    const avgDeviation = ratings.reduce((acc, r) => acc + r.ratingDeviation, 0) / ratings.length;
+    const lowConfidenceModel = avgDeviation > 290;
     const weakest = ratings.slice(0, 3);
     const lowRetention = ratings.filter((r) => r.retentionIndex < 0.75).slice(0, 3);
     const slowButCorrect = ratings.filter((r) => r.speedIndex < 0.85 && r.rating >= 1150).slice(0, 3);
@@ -58,6 +69,7 @@ export class NextBestActionEngine {
         topics: lowRetention.map((r) => ({ topicId: r.topicId, topicName: r.topic.name })),
         intensity: 'medium',
         reason: 'Retention drop detected. Schedule spaced revision for at-risk topics.',
+        confidence: lowConfidenceModel ? 'low' : 'high',
       };
     }
 
@@ -72,6 +84,7 @@ export class NextBestActionEngine {
         topics: prereqTopics,
         intensity: 'high',
         reason: 'Prerequisite mastery gap found. Backtrack before progressing.',
+        confidence: 'high',
       };
     }
 
@@ -81,6 +94,7 @@ export class NextBestActionEngine {
         topics: fastButWeak.map((r) => ({ topicId: r.topicId, topicName: r.topic.name })),
         intensity: 'high',
         reason: 'Student is fast but inaccurate. Needs conceptual correction blocks.',
+        confidence: lowConfidenceModel ? 'medium' : 'high',
       };
     }
 
@@ -90,24 +104,37 @@ export class NextBestActionEngine {
         topics: slowButCorrect.map((r) => ({ topicId: r.topicId, topicName: r.topic.name })),
         intensity: 'medium',
         reason: 'Student is accurate but slow. Recommend timed drills.',
+        confidence: 'high',
+      };
+    }
+
+    if (trendDelta < -0.12) {
+      return {
+        recommendedBlockType: 'PRACTICE_REINFORCEMENT' as BlockType,
+        topics: weakest.map((r) => ({ topicId: r.topicId, topicName: r.topic.name })),
+        intensity: 'high',
+        reason: 'Accuracy trend is dropping. Increase guided reinforcement to arrest decline.',
+        confidence: 'high',
       };
     }
 
     const minRating = Math.min(...ratings.map((r) => r.rating));
-    if (avgAccuracy >= 0.75 && minRating >= 1250) {
+    if (avgAccuracy >= 0.75 && minRating >= 1250 && trendDelta >= -0.03) {
       return {
         recommendedBlockType: 'RAISE_DIFFICULTY' as BlockType,
         topics: weakest.map((r) => ({ topicId: r.topicId, topicName: r.topic.name })),
         intensity: 'medium',
         reason: 'Stable strong performance. Increase challenge level.',
+        confidence: lowConfidenceModel ? 'medium' : 'high',
       };
     }
 
     return {
       recommendedBlockType: 'PRACTICE_REINFORCEMENT' as BlockType,
       topics: weakest.map((r) => ({ topicId: r.topicId, topicName: r.topic.name })),
-      intensity: avgAccuracy < 0.5 ? 'high' : 'low',
+      intensity: avgAccuracy < 0.5 || lowConfidenceModel ? 'high' : 'low',
       reason: 'Continue reinforcement on lowest mastery topics.',
+      confidence: lowConfidenceModel ? 'low' : 'medium',
     };
   }
 }

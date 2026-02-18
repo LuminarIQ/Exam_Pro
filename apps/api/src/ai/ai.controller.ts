@@ -21,4 +21,19 @@ export class AiController {
   metrics() {
     return this.aiService.queueMetrics();
   }
+
+  @Get('prompts')
+  @Roles('ADMIN', 'TEACHER')
+  prompts(@Req() req: any) {
+    return this.aiService.listPromptVersions(req.tenantId);
+  }
+
+  @Post('prompts')
+  @Roles('ADMIN', 'TEACHER')
+  upsertPrompt(
+    @Req() req: any,
+    @Body() body: { version: string; template: string; isActive?: boolean },
+  ) {
+    return this.aiService.upsertPromptVersion(req.tenantId, req.user.sub, body);
+  }
 }

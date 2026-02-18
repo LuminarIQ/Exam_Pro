@@ -20,6 +20,20 @@ async function main() {
       aiQuotaResetAt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1),
     },
   });
+  await prisma.promptVersion.upsert({
+    where: { tenantId_version: { tenantId: tenant.id, version: 'v1' } },
+    update: {
+      template: 'Generate one MCQ with 4 options, one correct answer, and concise explanation.',
+      isActive: true,
+      createdById: null,
+    },
+    create: {
+      tenantId: tenant.id,
+      version: 'v1',
+      template: 'Generate one MCQ with 4 options, one correct answer, and concise explanation.',
+      isActive: true,
+    },
+  });
 
   const pass = await bcrypt.hash('Password123!', 10);
   const [admin, teacher, student] = await Promise.all([

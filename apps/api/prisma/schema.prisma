@@ -43,6 +43,7 @@ model Tenant {
   createdAt DateTime @default(now())
   users     User[]
   settings  TenantSettings?
+  prompts   PromptVersion[]
 }
 
 model TenantSettings {
@@ -194,6 +195,7 @@ model Question {
   id                   String                  @id @default(cuid())
   tenantId             String
   stem                 String
+  contentHash          String?
   explanation          String?
   expectedSolveTimeSec Int                     @default(60)
   source               QuestionSource          @default(MANUAL)
@@ -208,6 +210,7 @@ model Question {
   questionRatings      QuestionTopicRating[]
 
   @@index([tenantId, status])
+  @@index([tenantId, contentHash])
 }
 
 model QuestionOption {
@@ -252,8 +255,32 @@ model QuestionGenerationRequest {
   status        GenerationStatus @default(QUEUED)
   jobId         String?
   resultQuestionId String?
+  provider      String?
+  outputHash    String?
+  aiConfidence  Float?
+  hallucinationRisk Float?
+  plagiarismScore Float?
+  rubricCompliant Boolean?
+  dedupeDetected Boolean @default(false)
   error         String?
   createdAt     DateTime         @default(now())
+
+  @@index([tenantId, promptVersion])
+}
+
+model PromptVersion {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  version      String
+  template     String
+  isActive     Boolean  @default(false)
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, version])
+  @@index([tenantId, isActive])
 }
 
 model Attempt {

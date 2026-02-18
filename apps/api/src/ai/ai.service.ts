@@ -9,6 +9,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QuestionsService } from '../questions/questions.service';
 import { Job, Queue, Worker } from 'bullmq';
 import { MetricsService } from '../observability/metrics.service';
+import { z } from 'zod';
+import { createHash } from 'crypto';
 
 interface IAIProvider {
   readonly name: string;
@@ -36,6 +38,13 @@ interface IAIProvider {
     }>;
   }>;
 }
+
+const GeneratedQuestionSchema = z.object({
+  stem: z.string().min(12).max(2000),
+  explanation: z.string().min(8).max(3000),
+  options: z.array(z.object({ text: z.string().min(1), isCorrect: z.boolean() })).length(4),
+  difficulty: z.number().int().min(800).max(2400),
+});
 
 class StubAIProvider implements IAIProvider {
   readonly name = 'stub';
@@ -418,7 +427,43 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         'generate-question',
         async (job: Job) => {
           const { requestId, tenantId, topicIds, userId } = job.data as any;
-          const generated = await this.provider.generateQuestion({ topicIds });
+          const request = await this.prisma.questionGenerationRequest.findFirst({
+            where: { id: requestId, tenantId },
+          });
+          if (!request) throw new Error('Question generation request not found');
+
+          const prompt = await this.resolvePromptVersion(tenantId, request.promptVersion);
+          if (!prompt?.isActive) {
+            throw new Error(`Prompt version ${request.promptVersion} is not active for tenant ${tenantId}`);
+          }
+
+          const raw = await this.provider.generateQuestion({ topicIds });
+          const generated = GeneratedQuestionSchema.parse(raw);
+          const outputHash = this.computeQuestionHash(generated.stem, generated.options.map((o) => o.text));
+          const governance = this.computeGovernanceSignals(generated, prompt.template);
+          const duplicate = await this.prisma.question.findFirst({
+            where: { tenantId, contentHash: outputHash },
+            select: { id: true },
+          });
+          if (duplicate) {
+            await this.prisma.questionGenerationRequest.update({
+              where: { id: requestId },
+              data: {
+                status: 'FAILED',
+                error: `Duplicate generated question fingerprint ${outputHash}`,
+                provider: this.provider.name,
+                outputHash,
+                dedupeDetected: true,
+                aiConfidence: governance.aiConfidence,
+                hallucinationRisk: governance.hallucinationRisk,
+                plagiarismScore: governance.plagiarismScore,
+                rubricCompliant: governance.rubricCompliant,
+              },
+            });
+            this.metrics.aiJobsTotal.inc({ tenant: tenantId, status: 'duplicate' });
+            return;
+          }
+
           const q = await this.questionsService.create(tenantId, userId, {
             topicIds,
             stem: generated.stem,
@@ -428,10 +473,24 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
             source: 'AI',
             difficulty: generated.difficulty,
           });
+          await this.prisma.question.update({
+            where: { id: q.id },
+            data: { contentHash: outputHash },
+          });
 
           await this.prisma.questionGenerationRequest.update({
             where: { id: requestId },
-            data: { status: 'GENERATED', resultQuestionId: q.id },
+            data: {
+              status: 'GENERATED',
+              resultQuestionId: q.id,
+              provider: this.provider.name,
+              outputHash,
+              aiConfidence: governance.aiConfidence,
+              hallucinationRisk: governance.hallucinationRisk,
+              plagiarismScore: governance.plagiarismScore,
+              rubricCompliant: governance.rubricCompliant,
+              dedupeDetected: false,
+            },
           });
           this.metrics.aiJobsTotal.inc({ tenant: tenantId, status: 'generated' });
         },
@@ -484,6 +543,12 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     userId: string,
     body: { topicIds: string[]; promptVersion?: string },
   ) {
+    const requestedPromptVersion = body.promptVersion || 'v1';
+    const prompt = await this.resolvePromptVersion(tenantId, requestedPromptVersion);
+    if (!prompt || !prompt.isActive) {
+      throw new ForbiddenException(`Prompt version ${requestedPromptVersion} is not active`);
+    }
+
     const now = new Date();
     const defaultQuota = Number(process.env.DEFAULT_AI_MONTHLY_QUOTA || 1000);
     const settings = await this.prisma.tenantSettings.upsert({
@@ -528,7 +593,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       data: {
         tenantId,
         requestedById: userId,
-        promptVersion: body.promptVersion || 'v1',
+        promptVersion: requestedPromptVersion,
         payload: body as any,
         status: 'QUEUED',
       },
@@ -557,6 +622,45 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     });
 
     return { requestId: request.id, jobId: job.id };
+  }
+
+  async listPromptVersions(tenantId: string) {
+    return this.prisma.promptVersion.findMany({
+      where: { tenantId },
+      orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async upsertPromptVersion(
+    tenantId: string,
+    actorId: string,
+    payload: { version: string; template: string; isActive?: boolean },
+  ) {
+    const version = payload.version.trim();
+    if (!version) {
+      throw new ForbiddenException('Prompt version cannot be empty');
+    }
+    if (payload.isActive) {
+      await this.prisma.promptVersion.updateMany({
+        where: { tenantId, isActive: true },
+        data: { isActive: false },
+      });
+    }
+    return this.prisma.promptVersion.upsert({
+      where: { tenantId_version: { tenantId, version } },
+      update: {
+        template: payload.template,
+        isActive: Boolean(payload.isActive),
+        createdById: actorId,
+      },
+      create: {
+        tenantId,
+        version,
+        template: payload.template,
+        isActive: Boolean(payload.isActive),
+        createdById: actorId,
+      },
+    });
   }
 
   async queueMetrics() {
@@ -723,6 +827,50 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       if (!merged.has(r.url)) merged.set(r.url, r);
     });
     return Array.from(merged.values()).slice(0, 12);
+  }
+
+  private async resolvePromptVersion(tenantId: string, requestedVersion: string) {
+    const exact = await this.prisma.promptVersion.findUnique({
+      where: { tenantId_version: { tenantId, version: requestedVersion } },
+    });
+    if (exact) return exact;
+    return this.prisma.promptVersion.findFirst({
+      where: { tenantId, isActive: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  private computeQuestionHash(stem: string, options: string[]) {
+    const normalizedStem = stem.trim().toLowerCase().replace(/\s+/g, ' ');
+    const normalizedOptions = options.map((o) => o.trim().toLowerCase().replace(/\s+/g, ' ')).join('|');
+    return createHash('sha256').update(`${normalizedStem}::${normalizedOptions}`).digest('hex');
+  }
+
+  private computeGovernanceSignals(
+    generated: z.infer<typeof GeneratedQuestionSchema>,
+    promptTemplate: string,
+  ) {
+    const words = generated.stem.trim().split(/\s+/).length;
+    const explanationWords = generated.explanation.trim().split(/\s+/).length;
+    const optionUniq = new Set(generated.options.map((o) => o.text.trim().toLowerCase())).size;
+    const rubricCompliant = optionUniq === 4 && generated.options.filter((o) => o.isCorrect).length === 1;
+    const aiConfidence = Math.min(0.95, 0.4 + Math.min(20, words) / 40 + Math.min(30, explanationWords) / 100);
+    const hallucinationRisk = Math.max(0.05, generated.explanation.length < 20 ? 0.45 : 0.18);
+    const plagiarismScore = this.similarityHint(generated.stem, promptTemplate);
+    return {
+      rubricCompliant,
+      aiConfidence,
+      hallucinationRisk,
+      plagiarismScore,
+    };
+  }
+
+  private similarityHint(a: string, b: string) {
+    const tokensA = new Set(a.toLowerCase().split(/\W+/).filter(Boolean));
+    const tokensB = new Set(b.toLowerCase().split(/\W+/).filter(Boolean));
+    const overlap = [...tokensA].filter((t) => tokensB.has(t)).length;
+    const denom = Math.max(tokensA.size, 1);
+    return Math.min(1, overlap / denom);
   }
 
   async onModuleDestroy() {
