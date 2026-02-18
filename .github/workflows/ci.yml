@@ -105,7 +105,7 @@ jobs:
         run: |
           PORT=3010 pnpm --filter @app/api start > /tmp/api.log 2>&1 &
           ok=0
-          for i in {1..30}; do
+          for i in {1..90}; do
             if curl -fsS http://localhost:3010/api/health >/dev/null; then
               ok=1
               break
@@ -114,6 +114,8 @@ jobs:
           done
           if [ "$ok" -ne 1 ]; then
             echo "Smoke startup failed. API log tail:"
+            echo "Listening sockets on 3010:"
+            ss -lntp | grep 3010 || true
             tail -n 200 /tmp/api.log || true
             exit 1
           fi
